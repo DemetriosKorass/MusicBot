@@ -28,6 +28,20 @@ public class DiscordService : IDiscordService
             return Task.CompletedTask;
         };
 
+        Client.Disconnected += async ex =>
+        {
+            Console.WriteLine($"⚠️ Gateway disconnected: {ex?.Message}. Reconnecting in 5 seconds...");
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            try
+            {
+                await Client.StartAsync();
+            }
+            catch (Exception reconnectEx)
+            {
+                Console.WriteLine($"❌ Reconnect failed: {reconnectEx.Message}");
+            }
+        };
+
         await Client.LoginAsync(TokenType.Bot, _cfg.Token);
         await Client.StartAsync();
     }

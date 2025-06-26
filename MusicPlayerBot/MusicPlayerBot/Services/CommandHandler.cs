@@ -59,77 +59,76 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
 
     private async Task HandleSlashAsync(SocketSlashCommand slash)
     {
+        Console.WriteLine($"[CommandHandler] Slash '{slash.Data.Name}' invoked by {slash.User.Username}");
         await slash.DeferAsync(ephemeral: false);
 
-        var user = slash.User as SocketGuildUser;
-        if (user?.VoiceChannel == null)
+        try
         {
+            var user = slash.User as SocketGuildUser;
+            if (user?.VoiceChannel == null)
+            {
             await slash.FollowupAsync(
                 "You must be in a voice channel.",
                 ephemeral: true
             );
-            return;
-        }
+                return;
+            }
 
-        switch (slash.Data.Name)
-        {
-            case "play":
-                {
-                    var videoUrl = slash.Data.Options
-                                          .First(o => o.Name == "url")
-                                          .Value!
-                                          .ToString()!;
-
-                    var title = await _youtube.GetVideoTitleAsync(videoUrl) ?? "Unknown title";
-                    var streamUrl = await _youtube.GetAudioStreamUrlAsync(videoUrl);
-                    if (streamUrl == null)
+            switch (slash.Data.Name)
+            {
+                case "play":
                     {
-                        await slash.FollowupAsync(
-                            "❌ Couldn’t get an audio stream for that link.",
-                            ephemeral: true
-                        );
-                        return;
+                        var videoUrl = slash.Data.Options
+                                              .First(o => o.Name == "url")
+                                              .Value!
+                                              .ToString()!;
+
+                        try
+                        {
+                            var title = await _youtube.GetVideoTitleAsync(videoUrl) ?? "Unknown title";
+                            var streamUrl = await _youtube.GetAudioStreamUrlAsync(videoUrl)
+                                              ?? throw new Exception("Couldn’t get an audio stream for that link.");
+
+                            await _audio.PlayAsync(user.VoiceChannel, slash.Channel, streamUrl, title);
+                            await slash.FollowupAsync($"▶️ Playing **{title}**");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[CommandHandler] Play error: {ex}");
+                            await slash.FollowupAsync($"❌ Error playing track: {ex.Message}", ephemeral: true);
+                        }
+
+                        break;
                     }
 
-                    await _audio.PlayAsync(
-                        user.VoiceChannel,
-                        slash.Channel,
-                        streamUrl,
-                        title
-                    );
-
-                    await slash.FollowupAsync("▶️ Playing (or enqueued)!");
+                case "stop":
+                    await _audio.StopAsync(user.VoiceChannel.Guild);
+                    await slash.FollowupAsync("⏹️ Stopped.");
                     break;
-                }
 
-            case "stop":
-                await _audio.StopAsync(user.VoiceChannel.Guild);
-                await slash.FollowupAsync("⏹️ Stopped.");
-                break;
-
-            case "skip":
-                await _audio.SkipAsync(user.VoiceChannel.Guild);
+                case "skip":
+                    await _audio.SkipAsync(user.VoiceChannel.Guild);
                 await slash.FollowupAsync("⏭️ Skipped.");
-                break;
-
-            case "queue":
-                {
-                    var queueTitles = await _audio.GetQueueAsync(user.VoiceChannel.Guild);
-                    if (queueTitles.Length == 0)
-                    {
-                        await slash.FollowupAsync("📃 Queue is empty.", ephemeral: true);
-                    }
-                    else
-                    {
-                        var list = string.Join("\n", queueTitles
-                            .Select((t, i) => $"{i + 1}. {t}"));
-                        await slash.FollowupAsync(
-                            $"📃 **Queue:**\n{list}",
-                            ephemeral: true
-                        );
-                    }
                     break;
-                }
+
+                case "queue":
+                    {
+                        var queueTitles = await _audio.GetQueueAsync(user.VoiceChannel.Guild);
+                        if (queueTitles.Length == 0)
+                            await slash.FollowupAsync("📃 Queue is empty.", ephemeral: true);
+                        else
+                        {
+                            var list = string.Join("\n", queueTitles.Select((t, i) => $"{i + 1}. {t}"));
+                            await slash.FollowupAsync($"📃 **Queue:**\n{list}", ephemeral: true);
+                        }
+                        break;
+                    }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CommandHandler] Handler error: {ex}");
+            await slash.FollowupAsync("❌ An unexpected error occurred.", ephemeral: true);
         }
     }
 }

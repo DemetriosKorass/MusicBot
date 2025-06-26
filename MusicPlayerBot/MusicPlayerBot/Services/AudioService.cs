@@ -29,11 +29,13 @@ namespace MusicPlayerBot.Services
             var ctx = _contexts.GetOrAdd(guildId, _ => new PlaybackContext { Channel = vChannel });
 
             ctx.Queue.Enqueue(track);
-            await textChannel.SendMessageAsync(
-                ctx.IsRunning
-                  ? $"➡️ Enqueued **{title}**. Position: {ctx.Queue.Count}"
-                  : $"▶️ Starting **{title}**..."
-            );
+
+            if (ctx.IsRunning)
+            {
+                await textChannel.SendMessageAsync(
+                    $"➡️ Enqueued **{title}**. Position: {ctx.Queue.Count}"
+                );
+            }
 
             if (!ctx.IsRunning)
                 _ = RunPlaybackLoop(ctx, guildId);
