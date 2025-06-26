@@ -10,11 +10,23 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
 
     public void Initialize(DiscordSocketClient client)
     {
-        client.MessageReceived += async msgRaw =>
+        client.MessageReceived += msgRaw =>
         {
-            if (msgRaw.Author.IsBot || msgRaw is not SocketUserMessage msg) return;
+            _ = HandleMessageAsync(msgRaw);
+            return Task.CompletedTask;
+        };
+    }
+
+    private async Task HandleMessageAsync(SocketMessage raw)
+    {
+        try
+        {
+            if (raw.Author.IsBot || raw is not SocketUserMessage msg)
+                return;
+
             int pos = 0;
-            if (!msg.HasCharPrefix(PREFIX, ref pos)) return;
+            if (!msg.HasCharPrefix(PREFIX, ref pos))
+                return;
 
             var parts = msg.Content[pos..].Split(' ', 2);
             var cmd = parts[0].ToLower();
@@ -29,7 +41,11 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
                     await HandleStop(msg);
                     break;
             }
-        };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CommandHandler] Error: {ex}");
+        }
     }
 
     private async Task HandlePlay(SocketUserMessage msg, string? url)
