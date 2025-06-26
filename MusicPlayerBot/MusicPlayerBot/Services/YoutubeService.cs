@@ -14,4 +14,16 @@ public class YoutubeService : IYoutubeService
                             .FirstOrDefault();
         return audio?.Url;
     }
+    public async Task<string?> GetVideoTitleAsync(string url)
+    {
+        try
+        {
+            var video = await _yt.Videos.GetAsync(url);
+            return video.Title;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
