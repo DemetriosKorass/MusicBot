@@ -7,4 +7,5 @@ public interface IAudioService
     Task StopAsync(IGuild guild);
     Task SkipAsync(IGuild guild);
     Task<string[]> GetQueueAsync(IGuild guild);
+    Task<bool> ToggleLoopAsync(IGuild guild);
 }

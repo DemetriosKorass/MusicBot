@@ -44,6 +44,11 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
             new SlashCommandBuilder()
                 .WithName("queue")
                 .WithDescription("Show all pending tracks in the queue")
+                .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("loop")
+                .WithDescription("Toggle loop mode for the current queue")
                 .Build()
         };
 
@@ -121,6 +126,18 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
                             var list = string.Join("\n", queueTitles.Select((t, i) => $"{i + 1}. {t}"));
                             await slash.FollowupAsync($"📃 **Queue:**\n{list}", ephemeral: true);
                         }
+                        break;
+                    }
+
+                case "loop":
+                    {
+                        var toggledOn = await _audio.ToggleLoopAsync(user.VoiceChannel.Guild);
+                        await slash.FollowupAsync(
+                            toggledOn
+                              ? "🔁 Loop is **ON**."
+                              : "↪️ Loop is **OFF**.",
+                            ephemeral: true
+                        );
                         break;
                     }
             }
