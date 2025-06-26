@@ -1,71 +1,115 @@
-﻿using Discord;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Discord;
 using Discord.Audio;
-using Discord.WebSocket;
-using FFMpegCore;
-using FFMpegCore.Pipes;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services;
-public class AudioService : IAudioService
+namespace MusicPlayerBot.Services
 {
-    public async Task PlayAsync(IVoiceChannel vChannel, IMessageChannel textChannel, string url)
+    public class AudioService : IAudioService
     {
-        if (vChannel is not SocketVoiceChannel svc)
+        private class PlaybackContext
         {
-            await textChannel.SendMessageAsync("❌ I can only join guild voice channels.");
-            return;
+            public IAudioClient AudioClient { get; set; } = null!;
+            public Process FfmpegProcess { get; set; } = null!;
+            public Task CopyTask { get; set; } = null!;
+            public CancellationTokenSource Cts { get; set; } = null!;
+            public Queue<string> TrackQueue { get; } = new();
+            public bool IsPlaying { get; set; }
         }
 
-        var me = svc.Guild.CurrentUser;
-        var perms = me.GetPermissions(svc);
-        if (!perms.Connect || !perms.Speak)
+        private readonly ConcurrentDictionary<ulong, PlaybackContext> _contexts
+            = new();
+
+        public async Task PlayAsync(IVoiceChannel vChannel, IMessageChannel textChannel, string url)
         {
-            await textChannel.SendMessageAsync("❌ I need Connect & Speak permissions.");
-            return;
+            var guildId = vChannel.Guild.Id;
+
+            if (!_contexts.TryGetValue(guildId, out var ctx))
+            {
+                ctx = new PlaybackContext();
+                _contexts[guildId] = ctx;
+            }
+
+            if (ctx.IsPlaying)
+            {
+                ctx.TrackQueue.Enqueue(url);
+                await textChannel.SendMessageAsync($"➡️ Enqueued. Position: {ctx.TrackQueue.Count}");
+                return;
+            }
+
+            await InternalPlayAsync(vChannel, textChannel, url, ctx);
         }
 
-        IAudioClient client;
-        try
+        private async Task InternalPlayAsync(
+            IVoiceChannel vChannel,
+            IMessageChannel textChannel,
+            string url,
+            PlaybackContext ctx
+        )
         {
-            client = await svc.ConnectAsync();
-        }
-        catch (TimeoutException)
-        {
-            await textChannel.SendMessageAsync("⚠️ Connection timed out.");
-            return;
+            ctx.IsPlaying = true;
+
+            var conn = await vChannel.ConnectAsync();
+            var pcm = conn.CreatePCMStream(AudioApplication.Mixed);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = $"-re -i \"{url}\" -ac 2 -f s16le -ar 48000 pipe:1",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            var proc = Process.Start(psi)!;
+            var cts = new CancellationTokenSource();
+
+            ctx.AudioClient = conn;
+            ctx.FfmpegProcess = proc;
+            ctx.Cts = cts;
+
+            ctx.CopyTask = Task.Run(async () =>
+            {
+                try
+                {
+                    using var output = proc.StandardOutput.BaseStream;
+                    await output.CopyToAsync(pcm, cts.Token);
+                }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    await pcm.FlushAsync();
+                    await conn.StopAsync();
+
+                    ctx.IsPlaying = false;
+
+                    if (ctx.TrackQueue.TryDequeue(out var nextUrl))
+                    {
+                        await InternalPlayAsync(vChannel, textChannel, nextUrl, ctx);
+                    }
+                    else
+                    {
+                        _contexts.TryRemove(vChannel.Guild.Id, out _);
+                    }
+                }
+            });
         }
 
-        var pcm = client.CreatePCMStream(AudioApplication.Mixed);
-
-        try
+        public async Task StopAsync(IGuild guild)
         {
-            await FFMpegArguments
-                .FromUrlInput(new Uri(url), options => options
-                    .WithCustomArgument("-re")
-                )
-                .OutputToPipe(new StreamPipeSink(pcm), opts => opts
-                    .WithAudioCodec("pcm_s16le")
-                    .WithCustomArgument("-ar 48000")  
-                    .WithCustomArgument("-ac 2")      
-                    .WithCustomArgument("-f s16le")  
-                )
-                .ProcessAsynchronously();
+            var guildId = guild.Id;
+            if (_contexts.TryRemove(guildId, out var ctx))
+            {
+                ctx.Cts.Cancel();
+                try { await ctx.CopyTask; } catch { }
+                if (!ctx.FfmpegProcess.HasExited) ctx.FfmpegProcess.Kill();
+                await ctx.AudioClient.StopAsync();
+            }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[AudioService] FFmpeg error: {ex}");
-            await pcm.FlushAsync();
-            await client.StopAsync();
-            return;
-        }
-
-        await pcm.FlushAsync();
-        await client.StopAsync();
-    }
-
-    public async Task StopAsync(IGuild guild)
-    {
-        if (guild is SocketGuild sg && sg.AudioClient is { } client)
-            await client.StopAsync();
     }
 }

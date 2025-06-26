@@ -18,7 +18,7 @@ class Program
         var cmds = provider.GetRequiredService<ICommandHandler>();
 
         await discord.StartAsync();
-        cmds.Initialize(discord.Client);
+        await cmds.Initialize(discord.Client);
 
         await Task.Delay(-1);
     }
