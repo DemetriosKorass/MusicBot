@@ -4,17 +4,12 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Core;
 
-/// <summary>
-/// Handles incoming Discord slash commands and delegates to the playback orchestrator.
-/// </summary>
 public class CommandHandler(IPlaybackOrchestrator orchestrator) : ICommandHandler
 {
     private readonly IPlaybackOrchestrator _orchestrator = orchestrator;
     private DiscordSocketClient _client = null!;
 
-    /// <summary>
-    /// Wires up the Discord client events.
-    /// </summary>
+
     public Task Initialize(DiscordSocketClient client)
     {
         _client = client;
@@ -23,9 +18,6 @@ public class CommandHandler(IPlaybackOrchestrator orchestrator) : ICommandHandle
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Registers all of the slash commands that the bot supports.
-    /// </summary>
     private async Task RegisterSlashCommands()
     {
         var commands = new[]
@@ -61,18 +53,12 @@ public class CommandHandler(IPlaybackOrchestrator orchestrator) : ICommandHandle
             await _client.CreateGlobalApplicationCommandAsync(cmd);
     }
 
-    /// <summary>
-    /// Entry point for when a slash command is executed.
-    /// </summary>
     private Task OnSlashExecuted(SocketSlashCommand slash)
     {
         _ = HandleSlashAsync(slash);
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Routes each slash command to the corresponding orchestrator action.
-    /// </summary>
     private async Task HandleSlashAsync(SocketSlashCommand slash)
     {
         if (slash.User is not SocketGuildUser user || !_orchestrator.CheckIfUserIsInChannelAsync(slash, user).Result)

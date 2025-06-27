@@ -3,26 +3,11 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services
 {
-    /// <summary>
-    /// Coordinates all playback actions (Play, Stop, Skip, Queue, Loop) by
-    /// calling into YouTube and Audio services and sending a single Discord response.
-    /// </summary>
     public class PlaybackOrchestrator(IYoutubeService yt, IAudioService audio) : IPlaybackOrchestrator
     {
-        /// <summary>
-        /// Writes a timestamped log entry to the console.
-        /// </summary>
         private static void Log(string level, string msg)
             => Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {msg}");
 
-        /// <summary>
-        /// Handles the Play command: resolves the video title and stream URL, 
-        /// enqueues or starts playback, and sends a single response indicating
-        /// whether the track is playing immediately or has been enqueued.
-        /// </summary>
-        /// <param name="slash">The incoming slash command context.</param>
-        /// <param name="user">The guild user who invoked the command.</param>
-        /// <param name="videoUrl">The YouTube video URL to play.</param>
         public async Task AddTrackAsync(SocketSlashCommand slash, SocketGuildUser user, string videoUrl)
         {
             Log("INFO", $"User {user.Username} enqueued URL: {videoUrl}");
@@ -49,11 +34,6 @@ namespace MusicPlayerBot.Services
             }
         }
 
-        /// <summary>
-        /// Signals the audio service to skip the current track and play the next one.
-        /// </summary>
-        /// <param name="slash">The incoming slash command context.</param>
-        /// <param name="user">The guild user who invoked the command.</param>
         public async Task PlayNextAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             Log("INFO", $"User {user.Username} requested PlayNext");
@@ -61,9 +41,6 @@ namespace MusicPlayerBot.Services
             await slash.RespondAsync("⏭️ Skipped to the next track.");
         }
 
-        /// <summary>
-        /// Stops playback entirely and clears the queue.
-        /// </summary>
         public async Task StopAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             Log("INFO", $"User {user.Username} requested Stop");
@@ -71,15 +48,9 @@ namespace MusicPlayerBot.Services
             await slash.RespondAsync("⏹️ Playback stopped.");
         }
 
-        /// <summary>
-        /// Shortcut for skipping: invokes PlayNextAsync.
-        /// </summary>
         public Task SkipAsync(SocketSlashCommand slash, SocketGuildUser user)
             => PlayNextAsync(slash, user);
 
-        /// <summary>
-        /// Shows the current queue of pending tracks.
-        /// </summary>
         public async Task QueueAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             Log("INFO", $"User {user.Username} requested Queue");
@@ -93,9 +64,6 @@ namespace MusicPlayerBot.Services
                 );
         }
 
-        /// <summary>
-        /// Toggles loop mode for the queue, so finished tracks are re-enqueued.
-        /// </summary>
         public async Task LoopAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             Log("INFO", $"User {user.Username} toggled loop");
@@ -105,10 +73,7 @@ namespace MusicPlayerBot.Services
                 ephemeral: true
             );
         }
-
-        /// <summary>
-        /// Checks whether command initiating user is in voice channel, if not - returns false.
-        /// </summary>    
+  
         public async Task<bool> CheckIfUserIsInChannelAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             if (user?.VoiceChannel == null)
