@@ -8,12 +8,12 @@ public class LoopCommandHandler(
     ICheckVoiceAction checkVoice
 ) : ICommandHandler<LoopCommand>
 {
-    public async Task HandleAsync(LoopCommand cmd)
+    public async Task HandleAsync(LoopCommand cmd, PlaybackContext ctx)
     {
         if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
             return;
 
         await cmd.Slash.DeferAsync();
-        await loop.ExecuteAsync(cmd.Slash, cmd.User);
+        await loop.ExecuteAsync(cmd.Slash, cmd.User, ctx);
     }
 }

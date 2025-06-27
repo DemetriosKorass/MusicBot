@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.CommandHandlers;
 using MusicPlayerBot.Services.Actions;
+using Discord.WebSocket;
 
 class Program
 {
@@ -22,7 +23,6 @@ class Program
                     options.IncludeScopes = false;
                 });
             })
-            .AddSingleton<AudioEventsSubscriber>()
             .AddSingleton<IConfigurationService, ConfigurationService>()
             .AddSingleton<IDiscordService, DiscordService>()
             .AddSingleton<IYoutubeService, YoutubeService>()
@@ -41,11 +41,18 @@ class Program
             .AddSingleton<ISkipAction, SkipAction>()
             .AddSingleton<IStopAction, StopAction>()
             .AddSingleton<IEnqueueAction, EnqueueAction>()
-            ;
+            .AddSingleton<IAddTrackAction, AddTrackAction>()
+            .AddSingleton<ICheckVoiceAction, CheckVoiceAction>()
+            .AddSingleton<IShowQueueAction, ShowQueueAction>()
+            .AddSingleton<IEnableLoopAction, EnableLoopAction>()
+
+            .AddSingleton<DiscordSocketClient>()
+            .AddSingleton<AudioEventsSubscriber>();
 
         var provider = services.BuildServiceProvider();
         var discord = provider.GetRequiredService<IDiscordService>();
         var cmds = provider.GetRequiredService<ISlashCommandDispatcher>();
+        provider.GetRequiredService<AudioEventsSubscriber>();
 
         await discord.StartAsync();
         await cmds.Initialize(discord.Client);

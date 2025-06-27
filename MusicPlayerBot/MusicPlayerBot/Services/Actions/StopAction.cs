@@ -1,5 +1,6 @@
 ﻿using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
@@ -11,13 +12,15 @@ public class StopAction(
     ILogger<StopAction> logger
 ) : IStopAction
 {
-    public async Task ExecuteAsync(SocketSlashCommand slash, SocketGuildUser user)
+    public async Task ExecuteAsync(SocketSlashCommand slash,
+        SocketGuildUser user,
+        PlaybackContext ctx)
     {
         var guildId = user.Guild.Id;
         logger.LogInformation("Guild {Guild}: stop requested", guildId);
 
         await ctxMgr.RemoveAsync(guildId);
-        await audio.StopAsync(user.Guild);
+        await audio.StopAsync(user.Guild, ctx);
         await slash.FollowupAsync("⏹️ Playback stopped.");
     }
 }

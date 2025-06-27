@@ -8,12 +8,12 @@ public class SkipCommandHandler(
     ICheckVoiceAction checkVoice
 ) : ICommandHandler<SkipCommand>
 {
-    public async Task HandleAsync(SkipCommand cmd)
+    public async Task HandleAsync(SkipCommand cmd, PlaybackContext ctx)
     {
         if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
             return;
 
         await cmd.Slash.DeferAsync();
-        await skip.ExecuteAsync(cmd.Slash, cmd.User);
+        await skip.ExecuteAsync(cmd.Slash, cmd.User, ctx);
     }
 }

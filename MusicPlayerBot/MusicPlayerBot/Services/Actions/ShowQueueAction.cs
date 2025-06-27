@@ -1,18 +1,19 @@
 ﻿using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
 /// <inheritdoc cref="IShowQueueAction"/>
-public class ShowQueueAction(
-    IPlaybackContextManager ctxMgr,
-    ILogger<ShowQueueAction> logger
-) : IShowQueueAction
+public class ShowQueueAction(ILogger<ShowQueueAction> logger) : IShowQueueAction
 {
-    public async Task ExecuteAsync(SocketSlashCommand slash, SocketGuildUser user)
+    public async Task ExecuteAsync(SocketSlashCommand slash,
+                                    SocketGuildUser user,
+                                    PlaybackContext ctx)
     {
-        var ctx = ctxMgr.GetOrCreate(user.Guild.Id);
+        var voiceChannel = user.VoiceChannel;
+        var textChannel = slash.Channel;
         var items = ctx.TrackQueue
                        .Select((t, i) => $"{i + 1}. {t.DisplayName}")
                        .ToArray();

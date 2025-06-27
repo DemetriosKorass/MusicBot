@@ -1,18 +1,19 @@
 ﻿using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
 /// <inheritdoc cref="IEnableLoopAction"/>
 public class EnableLoopAction(
-    IPlaybackContextManager ctxMgr,
     ILogger<EnableLoopAction> logger
 ) : IEnableLoopAction
 {
-    public async Task ExecuteAsync(SocketSlashCommand slash, SocketGuildUser user)
+    public async Task ExecuteAsync(SocketSlashCommand slash,
+                                   SocketGuildUser user,
+                                   PlaybackContext ctx)
     {
-        var ctx = ctxMgr.GetOrCreate(user.Guild.Id);
         ctx.IsLoopEnabled = !ctx.IsLoopEnabled;
 
         logger.LogInformation("Guild {Guild}: loop {State}",

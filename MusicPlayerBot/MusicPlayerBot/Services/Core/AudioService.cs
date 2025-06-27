@@ -7,7 +7,6 @@ using MusicPlayerBot.Services.Interfaces;
 namespace MusicPlayerBot.Services.Core;
 
 public class AudioService(
-    IPlaybackContextManager ctxMgr,
     IAudioEncoder encoder,
     ILogger<AudioService> logger
 ) : IAudioService
@@ -15,22 +14,20 @@ public class AudioService(
     /// <summary>
     /// Raised when a track finishes playback.
     /// </summary>
-    public event Func<ulong, string, Task>? TrackEnded;
+    public event Func<ulong, PlaybackContext, string, Task>? TrackEnded;
 
     /// <inheritdoc />
-    public async Task<IAudioClient> PlayAsync(IVoiceChannel channel, Track track)
+    public async Task<IAudioClient> PlayAsync(Track track, PlaybackContext ctx)
     {
-        var guildId = channel.Guild.Id;
-        var ctx = ctxMgr.GetOrCreate(guildId);
-
-        var audioClient = await ConnectAndPrepareAsync(channel, ctx);
+        var guildId = ctx.VoiceChannel.Guild.Id;
+        var audioClient = await ConnectAndPrepareAsync(ctx.VoiceChannel, ctx);
 
         var pcm = audioClient.CreatePCMStream(AudioApplication.Mixed);
 
         CancelAndResetTrack(ctx);
         var token = ctx.TrackCts.Token;
 
-        _ = Task.Run(() => RunPlaybackAsync(track, audioClient, pcm, guildId, token));
+        _ = Task.Run(() => RunPlaybackAsync(track, audioClient, pcm, guildId, ctx, token));
 
         logger.LogInformation("Guild {GuildId}: started track: {Title}", guildId, track.Title);
         return audioClient;
@@ -54,6 +51,7 @@ public class AudioService(
         IAudioClient audioClient,
         AudioOutStream pcm,
         ulong guildId,
+        PlaybackContext ctx,
         CancellationToken token)
     {
         try
@@ -71,55 +69,31 @@ public class AudioService(
         finally
         {
             try { await pcm.FlushAsync(token).ConfigureAwait(false); } catch { }
-            try { await audioClient.StopAsync().ConfigureAwait(false); } catch { }
+            //try { await audioClient.StopAsync().ConfigureAwait(false); } catch { }
 
             logger.LogInformation("Guild {GuildId}: track ended: {Title}", guildId, track.Title);
 
             if (TrackEnded != null)
-                await TrackEnded(guildId, track.Title);
+                await TrackEnded(guildId, ctx, track.Title);
         }
     }
 
 
     /// <inheritdoc />
-    public Task SkipAsync(IGuild guild)
+    public Task SkipAsync(IGuild guild, PlaybackContext ctx)
     {
-        var ctx = ctxMgr.GetOrCreate(guild.Id);
         logger.LogInformation("Guild {GuildId}: skip invoked", guild.Id);
         ctx.TrackCts.Cancel();
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public async Task StopAsync(IGuild guild)
+    public async Task StopAsync(IGuild guild, PlaybackContext ctx)
     {
-        var ctx = ctxMgr.GetOrCreate(guild.Id);
         if (ctx.AudioClient is { })
         {
             logger.LogInformation("Guild {GuildId}: stop invoked", guild.Id);
             await ctx.AudioClient.StopAsync().ConfigureAwait(false);
         }
-    }
-
-    /// <inheritdoc />
-    public Task<string[]> GetQueueAsync(IGuild guild)
-    {
-        var ctx = ctxMgr.GetOrCreate(guild.Id);
-        var titles = ctx.TrackQueue
-                        .Select(t => t.Title)
-                        .ToArray();
-        return Task.FromResult(titles);
-    }
-
-    /// <inheritdoc />
-    public Task<bool> ToggleLoopAsync(IGuild guild)
-    {
-        var ctx = ctxMgr.GetOrCreate(guild.Id);
-        ctx.IsLoopEnabled = !ctx.IsLoopEnabled;
-        logger.LogInformation(
-            "Guild {GuildId}: loop {State}",
-            guild.Id, ctx.IsLoopEnabled ? "enabled" : "disabled"
-        );
-        return Task.FromResult(ctx.IsLoopEnabled);
     }
 }

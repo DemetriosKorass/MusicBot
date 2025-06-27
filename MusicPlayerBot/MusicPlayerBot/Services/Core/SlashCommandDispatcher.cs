@@ -10,7 +10,8 @@ namespace MusicPlayerBot.Services.Core
         ICommandHandler<SkipCommand> skipHandler,
         ICommandHandler<StopCommand> stopHandler,
         ICommandHandler<QueueCommand> queueHandler,
-        ICommandHandler<LoopCommand> loopHandler
+        ICommandHandler<LoopCommand> loopHandler,
+        IPlaybackContextManager ctxMgr
     ) : ISlashCommandDispatcher
     {
         private readonly ICommandHandler<PlayCommand> _playHandler = playHandler;
@@ -53,6 +54,8 @@ namespace MusicPlayerBot.Services.Core
         private async Task HandleSlashAsync(SocketSlashCommand slash)
         {
             var user = slash.User as SocketGuildUser;
+            var ctx = ctxMgr.GetOrCreate(user!.Guild.Id, user.VoiceChannel, slash.Channel);
+
             if (user?.VoiceChannel == null)
             {
                 await slash.RespondAsync("You must be in a voice channel.", ephemeral: true);
@@ -67,27 +70,27 @@ namespace MusicPlayerBot.Services.Core
                         user,
                         slash.Data.Options.First(o => o.Name == "url").Value!.ToString()!
                     );
-                    await _playHandler.HandleAsync(playCmd);
+                    await _playHandler.HandleAsync(playCmd, ctx);
                     break;
 
                 case "skip":
                     var skipCmd = new SkipCommand(slash, user);
-                    await _skipHandler.HandleAsync(skipCmd);
+                    await _skipHandler.HandleAsync(skipCmd, ctx);
                     break;
 
                 case "stop":
                     var stopCmd = new StopCommand(slash, user);
-                    await _stopHandler.HandleAsync(stopCmd);
+                    await _stopHandler.HandleAsync(stopCmd, ctx);
                     break;
 
                 case "queue":
                     var queueCmd = new QueueCommand(slash, user);
-                    await _queueHandler.HandleAsync(queueCmd);
+                    await _queueHandler.HandleAsync(queueCmd, ctx);
                     break;
 
                 case "loop":
                     var loopCmd = new LoopCommand(slash, user);
-                    await _loopHandler.HandleAsync(loopCmd);
+                    await _loopHandler.HandleAsync(loopCmd, ctx);
                     break;
             }
         }

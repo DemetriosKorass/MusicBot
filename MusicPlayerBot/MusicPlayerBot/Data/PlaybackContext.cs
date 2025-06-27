@@ -1,23 +1,24 @@
 ﻿using Discord.Audio;
+using Discord;
 
 namespace MusicPlayerBot.Data;
 
-/// <summary>
-/// Holds all playback state for a single guild.
-/// </summary>
-public sealed class PlaybackContext : IAsyncDisposable
+public sealed class PlaybackContext(IVoiceChannel channel, IMessageChannel textChannel) : IAsyncDisposable
 {
-    private CancellationTokenSource _trackCts = new();
+    public IVoiceChannel VoiceChannel { get; } = channel;
+    public IMessageChannel TextChannel { get; set; } = textChannel;
     public Track? CurrentTrack { get; set; }
     public Queue<Track> TrackQueue { get; } = new();
     public bool IsLoopEnabled { get; set; }
     public bool IsRunning { get; set; }
-    public CancellationTokenSource TrackCts => _trackCts; 
-    public void ResetTrackCts() => _trackCts = new CancellationTokenSource(); 
-
+    public CancellationTokenSource TrackCts { get; private set; } = new();
     public IAudioClient? AudioClient { get; set; }
 
-    public PlaybackContext() { }
+    public void ResetTrackCts()
+    {
+        TrackCts.Dispose();
+        TrackCts = new CancellationTokenSource();
+    }
 
     public async ValueTask DisposeAsync()
     {

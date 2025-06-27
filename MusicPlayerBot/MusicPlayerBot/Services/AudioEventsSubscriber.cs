@@ -1,4 +1,6 @@
 ﻿using Discord.WebSocket;
+using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services;
@@ -6,62 +8,52 @@ namespace MusicPlayerBot.Services;
 public class AudioEventsSubscriber
 {
     private readonly IAudioService _audio;
-    private readonly IPlayAction _playNext;
-    private readonly IEnqueueAction _enqueue;
+    private readonly IPlayAction _play;
+    private readonly IPlaybackContextManager _ctxMgr;
     private readonly DiscordSocketClient _client;
+    private readonly ILogger<AudioEventsSubscriber> _logger;
 
     public AudioEventsSubscriber(
         IAudioService audio,
-        IPlayAction playNext,
-        IEnqueueAction enqueue,
-        DiscordSocketClient client
+        IPlayAction play,
+        IPlaybackContextManager ctxMgr,
+        DiscordSocketClient client,
+        ILogger<AudioEventsSubscriber> logger
     )
     {
         _audio = audio;
-        _playNext = playNext;
-        _enqueue = enqueue;
+        _play = play;
+        _ctxMgr = ctxMgr;
         _client = client;
+        _logger = logger;
 
-        _audio.TrackEnded += async (guildId, title) =>
-            await OnTrackEndedAsync(guildId, title);
+        _audio.TrackEnded += async (guildId, ctx, _)
+            => await OnTrackEndedAsync(guildId, ctx);
     }
 
-    private async Task OnTrackEndedAsync(ulong guildId, string title)
+    private async Task OnTrackEndedAsync(ulong guildId, PlaybackContext ctx)
     {
-        var guild = _client.GetGuild(guildId);
-        if (guild == null) return;
+        var last = ctx.CurrentTrack;
+        _logger.LogInformation("Guild {GuildId}: track ended: {Title}", guildId, last?.Title);
 
-        // 2) Find the bot's voice channel in that guild
-        var voiceState = guild
-            .GetUser(_client.CurrentUser.Id)?
-            .VoiceChannel;
-        if (voiceState == null) return;
-
-        // 3) Pick a text channel to send follow-up messages
-        //    Here we use the first TextChannel, but you can store
-        //    “last used” per guild for more precision.
-        var textChannel = guild.TextChannels.FirstOrDefault();
-        if (textChannel == null) return;
-
-        // 4) Check loop flag
-        var isLooping = await _audio.IsLoopEnabledAsync(guild);
-        if (isLooping)
+        if (ctx.IsLoopEnabled && last != null)
         {
-            // re-enqueue the same title
-            await _enqueue.ExecuteAsync(
-                guild,
-                textChannel,
-                title
-            );
+            ctx.TrackQueue.Enqueue(last);
+            _logger.LogInformation("Guild {GuildId}: re-enqueued {Title} (loop)", guildId, last.Title);
+        }
+
+        if (ctx.TrackQueue.TryDequeue(out var next))
+        {
+            await _play.ExecuteAsync(next, ctx);
         }
         else
         {
-            // otherwise, play the next track
-            await _playNext.ExecuteAsync(
-                guild,
-                voiceState,
-                textChannel
-            );
+            _logger.LogInformation("Guild {GuildId}: queue empty, stopping", guildId);
+            ctx.IsRunning = false;
+            ctx.CurrentTrack = null;
+            if (ctx.AudioClient is not null)
+                await ctx.AudioClient.StopAsync();
+            await _ctxMgr.RemoveAsync(guildId);
         }
     }
 }

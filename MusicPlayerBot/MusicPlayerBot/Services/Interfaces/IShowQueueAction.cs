@@ -1,4 +1,5 @@
 ﻿using Discord.WebSocket;
+using MusicPlayerBot.Data;
 
 namespace MusicPlayerBot.Services.Interfaces
 {
@@ -12,7 +13,10 @@ namespace MusicPlayerBot.Services.Interfaces
         /// </summary>
         /// <param name="slash">The slash command triggering the action.</param>
         /// <param name="user">The guild user who initiated the command.</param>
+        /// <param name="context">The playback context containing the current track and queue information.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        Task ExecuteAsync(SocketSlashCommand slash, SocketGuildUser user);
+        Task ExecuteAsync(SocketSlashCommand slash,
+                          SocketGuildUser user,
+                          PlaybackContext context);
     }
 }

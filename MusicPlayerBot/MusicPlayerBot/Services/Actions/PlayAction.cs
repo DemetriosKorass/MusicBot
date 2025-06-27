@@ -1,30 +1,39 @@
-﻿using Discord.WebSocket;
+﻿using Discord;
+using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
-///inheritdoc cref="IPlayAction"/>
 public class PlayAction(
-    IYoutubeService yt,
-    IPlaybackContextManager ctxMgr,
-    IAudioService audio,
-    ILogger<PlayAction> logger
+   IAudioService audio,
+   ILogger<PlayAction> logger
 ) : IPlayAction
 {
-    public async Task ExecuteAsync(SocketSlashCommand slash, SocketGuildUser user, string videoUrl)
+    public async Task ExecuteAsync(Track track,
+                                  PlaybackContext ctx,
+                                  SocketSlashCommand? slash = null)
     {
-        await slash.DeferAsync(ephemeral: false);
-
-        var track = await yt.GetTrackAsync(videoUrl);
-        var ctx = ctxMgr.GetOrCreate(user.Guild.Id);
-
-        logger.LogInformation("Guild {Guild}: starting track {Title}", user.Guild.Id, track.Title);
+        var guildId = ctx.VoiceChannel.Guild.Id;
 
         ctx.IsRunning = true;
         ctx.CurrentTrack = track;
-        ctx.AudioClient = await audio.PlayAsync(user.VoiceChannel, slash.Channel, track);
 
-        await slash.FollowupAsync($"▶️ Now playing {track.DisplayName}");
+        logger.LogInformation(
+            "Guild {GuildId}: starting playback of {Title}",
+            guildId, track.Title
+        );
+
+        ctx.AudioClient = await audio.PlayAsync(track, ctx);
+  
+        if (slash == null)
+        {
+            await ctx.TextChannel.SendMessageAsync($"▶️ Now playing {track.DisplayName}");
+        }
+        else
+        {
+            await slash.FollowupAsync($"▶️ Now playing {track.DisplayName}");
+        }
     }
 }

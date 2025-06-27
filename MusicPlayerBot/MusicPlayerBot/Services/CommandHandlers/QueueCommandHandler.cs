@@ -8,12 +8,12 @@ public class QueueCommandHandler(
     ICheckVoiceAction checkVoice
 ) : ICommandHandler<QueueCommand>
 {
-    public async Task HandleAsync(QueueCommand cmd)
+    public async Task HandleAsync(QueueCommand cmd, PlaybackContext ctx)
     {
         if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
             return;
 
         await cmd.Slash.DeferAsync();
-        await queue.ExecuteAsync(cmd.Slash, cmd.User);
+        await queue.ExecuteAsync(cmd.Slash, cmd.User, ctx);
     }
 }

@@ -8,12 +8,12 @@ public class StopCommandHandler(
     ICheckVoiceAction checkVoice
 ) : ICommandHandler<StopCommand>
 {
-    public async Task HandleAsync(StopCommand cmd)
+    public async Task HandleAsync(StopCommand cmd, PlaybackContext ctx)
     {
         if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
             return;
 
         await cmd.Slash.DeferAsync();
-        await stop.ExecuteAsync(cmd.Slash, cmd.User);
+        await stop.ExecuteAsync(cmd.Slash, cmd.User, ctx);
     }
 }
