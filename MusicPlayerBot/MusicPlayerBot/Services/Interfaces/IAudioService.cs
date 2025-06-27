@@ -1,4 +1,5 @@
 ﻿using Discord;
+using MusicPlayerBot.Data;
 
 namespace MusicPlayerBot.Services.Interfaces;
 
@@ -14,7 +15,7 @@ public interface IAudioService
     /// </summary>
     event Action<ulong, string> TrackEnded;
 
-    Task PlayAsync(IVoiceChannel vChannel, IMessageChannel textChannel, string streamUrl, string title);
+    Task PlayAsync(IVoiceChannel vChannel, IMessageChannel textChannel, Track track);
     Task SkipAsync(IGuild guild);
     Task StopAsync(IGuild guild);
     Task<string[]> GetQueueAsync(IGuild guild);

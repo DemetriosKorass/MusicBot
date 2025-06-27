@@ -5,6 +5,7 @@ using MusicPlayerBot.Services;
 using Microsoft.Extensions.Logging;
 using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.CommandHandlers;
+using MusicPlayerBot.Services.Actions;
 
 class Program
 {
@@ -21,22 +22,31 @@ class Program
                     options.IncludeScopes = false;
                 });
             })
+            .AddSingleton<AudioEventsSubscriber>()
             .AddSingleton<IConfigurationService, ConfigurationService>()
             .AddSingleton<IDiscordService, DiscordService>()
             .AddSingleton<IYoutubeService, YoutubeService>()
             .AddSingleton<IAudioService, AudioService>()
             .AddSingleton<IAudioEncoder, FFmpegAudioEncoder>()
             .AddSingleton<IPlaybackOrchestrator, PlaybackOrchestrator>()
-            .AddSingleton<ICommandHandler_, SlashCommandDispatcher>()
+            .AddSingleton<IPlaybackContextManager, PlaybackContextManager>()
+
+            .AddSingleton<ISlashCommandDispatcher, SlashCommandDispatcher>()
             .AddSingleton<ICommandHandler<PlayCommand>, PlayCommandHandler>()
             .AddSingleton<ICommandHandler<SkipCommand>, SkipCommandHandler>()
             .AddSingleton<ICommandHandler<StopCommand>, StopCommandHandler>()
             .AddSingleton<ICommandHandler<QueueCommand>, QueueCommandHandler>()
-            .AddSingleton<ICommandHandler<LoopCommand>, LoopCommandHandler>();
+            .AddSingleton<ICommandHandler<LoopCommand>, LoopCommandHandler>()
+
+            .AddSingleton<IPlayAction, PlayAction>()
+            .AddSingleton<ISkipAction, SkipAction>()
+            .AddSingleton<IStopAction, StopAction>()
+            .AddSingleton<IEnqueueAction, EnqueueAction>()
+            ;
 
         var provider = services.BuildServiceProvider();
         var discord = provider.GetRequiredService<IDiscordService>();
-        var cmds = provider.GetRequiredService<ICommandHandler_>();
+        var cmds = provider.GetRequiredService<ISlashCommandDispatcher>();
 
         await discord.StartAsync();
         await cmds.Initialize(discord.Client);

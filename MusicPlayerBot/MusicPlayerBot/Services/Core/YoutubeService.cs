@@ -1,152 +1,41 @@
-﻿using System.Net;
-using System.Text.Json;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
-using YoutubeExplode;
-using YoutubeExplode.Videos.Streams;
+using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
-using System.Diagnostics;
+using YoutubeExplode;
 
 namespace MusicPlayerBot.Services.Core;
-public class YoutubeService : IYoutubeService
+
+/// <summary>
+/// Fetches YouTube video metadata and resolves a playable audio URL,
+/// with fallback to yt-dlp if necessary.
+/// </summary>
+public class YoutubeService(ILogger<YoutubeService> logger) : IYoutubeService
 {
-    private readonly YoutubeClient _yt;
-    private readonly HttpClient _http;
-    private readonly string[] _invidiousInstances =
-    [
-        "https://yewtu.be",
-        "https://yewtu.eu",
-        "https://yewtu.onl",
-        "https://yewtu.work"
-    ];
+    private readonly YoutubeClient _yt = new();
 
-    public YoutubeService()
+    public async Task<Track> GetTrackAsync(string youtubeUrl)
     {
-        var cookies = new CookieContainer();
-        cookies.Add(new Uri("https://www.youtube.com"),
-                    new Cookie("CONSENT", "YES+"));
-
-        var handler = new HttpClientHandler
+        var videoId = ExtractVideoId(youtubeUrl);
+        if (videoId == null)
         {
-            CookieContainer = cookies,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            logger.LogError("Failed to extract video ID from URL: {Url}", youtubeUrl);
+            throw new ArgumentException("Invalid YouTube URL provided.", nameof(youtubeUrl));
+        }
+
+        var metadata = await _yt.Videos.GetAsync(videoId);
+        logger.LogInformation("Fetched metadata for {Url}: {Title}", youtubeUrl, metadata.Title);
+
+        var streamUrl = await TryGetExplodeStreamAsync(videoId, youtubeUrl)
+                         ?? await GetViaYtDlpAsync(youtubeUrl);
+
+        return Track.FromInfo(videoId, streamUrl, metadata.Title) with
+        {
+            Duration = metadata.Duration,
+            ThumbnailUrl = metadata.Thumbnails?.Count > 0 ? metadata.Thumbnails[0].Url : null
         };
-        _http = new HttpClient(handler);
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/115.0 Safari/537.36"
-        );
-        _http.DefaultRequestHeaders.Referrer = new Uri("https://www.youtube.com");
 
-        _yt = new YoutubeClient(_http);
-    }
-
-    public async Task<string?> GetAudioStreamUrlAsync(string url)
-    {
-        var videoId = ExtractVideoId(url)
-                   ?? throw new Exception("Invalid YouTube URL");
-
-        try
-        {
-            var hls = await _yt.Videos.Streams.GetHttpLiveStreamUrlAsync(videoId);
-            if (!string.IsNullOrEmpty(hls))
-            {
-                //Console.WriteLine($"[YoutubeService] Using HLS playlist: {hls}");
-                return hls;
-            }
-        }
-        catch { }
-
-        try
-        {
-            var manifest = await _yt.Videos.Streams.GetManifestAsync(videoId);
-            var best = SelectBest(manifest);
-            if (best != null)
-            {
-                Console.WriteLine($"[YoutubeService] Selected direct stream: {best}");
-                return best;
-            }
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
-        {
-            Console.WriteLine("[YoutubeService] YouTube 403 – falling back to Invidious");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[YoutubeService] Direct fetch failed: {ex.Message}");
-        }
-
-        foreach (var baseUrl in _invidiousInstances)
-        {
-            try
-            {
-                var apiUrl = $"{baseUrl}/api/v1/videos/{videoId}";
-                var json = await _http.GetStringAsync(apiUrl);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("adaptiveFormats", out var arr))
-                {
-                    var streams = arr.EnumerateArray()
-                        .Select(e => new
-                        {
-                            Url = e.GetProperty("url").GetString()!,
-                            Container = e.GetProperty("container").GetString()!,
-                            Bitrate = e.GetProperty("bitrate").GetInt32()
-                        })
-                        .ToList();
-                    var best = streams
-                        .Where(s => s.Container.Equals("mp4", StringComparison.OrdinalIgnoreCase))
-                        .OrderByDescending(s => s.Bitrate)
-                        .FirstOrDefault()
-                        ?? streams.OrderByDescending(s => s.Bitrate).FirstOrDefault();
-                    if (best != null)
-                    {
-                        Console.WriteLine($"[YoutubeService] Invidious ({baseUrl}) → {best.Url}");
-                        return best.Url;
-                    }
-                }
-                Console.WriteLine($"[YoutubeService] Invidious ({baseUrl}) no formats");
-            }
-            catch (HttpRequestException hre) when (hre.StatusCode == (HttpStatusCode)429)
-            {
-                Console.WriteLine($"[YoutubeService] Invidious ({baseUrl}) 429 – trying next");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[YoutubeService] Invidious ({baseUrl}) error: {ex.Message}");
-            }
-        }
-
-        try
-        {
-            Console.WriteLine("[YoutubeService] Falling back to yt-dlp");
-            return await Task.Run(() => GetViaYtDlp(url));
-        }
-        catch (FileNotFoundException)
-        {
-            Console.WriteLine("❌ yt-dlp not found. Please install yt-dlp and add it to your PATH.");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[YoutubeService] yt-dlp failed: {ex.Message}");
-            return null;
-        }
-    }
-
-    public async Task<string?> GetVideoTitleAsync(string url)
-    {
-        try
-        {
-            var id = ExtractVideoId(url);
-            if (id == null) return null;
-            var video = await _yt.Videos.GetAsync(id);
-            return video.Title;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[YoutubeService] Title lookup failed: {ex.Message}");
-            return null;
-        }
     }
 
     private static string? ExtractVideoId(string url)
@@ -155,40 +44,58 @@ public class YoutubeService : IYoutubeService
         return m.Success ? m.Groups[1].Value : null;
     }
 
-    private static string? SelectBest(StreamManifest manifest)
+    private async Task<string?> TryGetExplodeStreamAsync(string videoId, string youtubeUrl)
     {
-        var muxed = manifest.GetMuxedStreams()
-            .Where(s => s.Container == Container.Mp4)
-            .OrderByDescending(s => s.Bitrate)
-            .FirstOrDefault();
-        if (muxed != null) return muxed.Url;
-
-        var audioMp4 = manifest.GetAudioOnlyStreams()
-            .Where(s => s.Container == Container.Mp4)
-            .OrderByDescending(s => s.Bitrate)
-            .FirstOrDefault();
-        if (audioMp4 != null) return audioMp4.Url;
-
-        var webm = manifest.GetAudioOnlyStreams()
-            .OrderByDescending(s => s.Bitrate)
-            .FirstOrDefault();
-        return webm?.Url;
-    }
-
-    private static string GetViaYtDlp(string pageUrl)
-    {
-        var psi = new ProcessStartInfo("yt-dlp",
-            $"--format bestaudio --get-url \"{pageUrl}\"")
+        try
         {
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        using var proc = Process.Start(psi)!;
-        var line = proc.StandardOutput.ReadLine();
-        proc.WaitForExit();
-        if (string.IsNullOrWhiteSpace(line))
-            throw new FileNotFoundException("yt-dlp did not return a URL.");
-        return line;
+            var hls = await _yt.Videos.Streams.GetHttpLiveStreamUrlAsync(videoId);
+            if (!string.IsNullOrWhiteSpace(hls))
+            {
+                logger.LogInformation("Using HLS playlist for {Url}", youtubeUrl);
+                return hls;
+            }
+
+            var manifest = await _yt.Videos.Streams.GetManifestAsync(videoId);
+            var best = manifest.GetAudioOnlyStreams()
+                               .OrderByDescending(s => s.Bitrate)
+                               .FirstOrDefault();
+            if (best != null)
+            {
+                logger.LogInformation(
+                  "Selected audio-only stream for {Url}: type={type}, bitrate={Bitrate}",
+                  youtubeUrl, best.Container.Name, best.Bitrate
+                );
+                return best.Url;
+            }
+
+            logger.LogWarning("No audio-only streams found for {Url}", youtubeUrl);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "YoutubeExplode fetch failed for {Url}", youtubeUrl);
+        }
+
+        return null;
     }
+
+    private Task<string> GetViaYtDlpAsync(string youtubeUrl)
+        => Task.Run(() =>
+        {
+            logger.LogInformation("Falling back to yt-dlp for {Url}", youtubeUrl);
+
+            var psi = new ProcessStartInfo("yt-dlp", $"--format bestaudio --get-url \"{youtubeUrl}\"")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi) ?? throw new FileNotFoundException("yt-dlp not found");
+            var url = proc.StandardOutput.ReadLine();
+            proc.WaitForExit();
+
+            if (string.IsNullOrWhiteSpace(url))
+                throw new Exception("yt-dlp did not return a URL.");
+
+            return url;
+        });
 }

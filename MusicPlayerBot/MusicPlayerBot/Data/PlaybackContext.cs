@@ -1,41 +1,26 @@
-﻿using System.Collections.Concurrent;
-using System.Threading.Channels;
-using Discord;
-using Discord.Audio;
+﻿using Discord.Audio;
 
 namespace MusicPlayerBot.Data;
 
-internal class PlaybackContext : IAsyncDisposable
+/// <summary>
+/// Holds all playback state for a single guild.
+/// </summary>
+public sealed class PlaybackContext : IAsyncDisposable
 {
-    public IVoiceChannel VoiceChannel { get; }
-    public Channel<(string Url, string Title)> Queue { get; }
-        = Channel.CreateUnbounded<(string, string)>();
-    public ConcurrentQueue<(string Url, string Title)> SnapshotQueue { get; }
-        = new ConcurrentQueue<(string, string)>();
-    public IAudioClient AudioClient { get; set; } = null!;
-
-    /// <summary>
-    /// Cancels the entire playback loop (used by Stop).
-    /// </summary>
-    public CancellationTokenSource LoopCts { get; set; } = new();
-
-    /// <summary>
-    /// Cancels only the current track decode (used by Skip).
-    /// </summary>
-    public CancellationTokenSource TrackCts { get; set; } = new();
-
+    public Track? CurrentTrack { get; set; }
+    public Queue<Track> TrackQueue { get; } = new();
     public bool IsLoopEnabled { get; set; }
-    public bool IsPaused { get; set; }
     public bool IsRunning { get; set; }
+    public CancellationTokenSource TrackCts { get; private set; } = new();
+    public IAudioClient? AudioClient { get; set; }
 
-    public PlaybackContext(IVoiceChannel channel) => VoiceChannel = channel;
+    public PlaybackContext() { }
 
     public async ValueTask DisposeAsync()
     {
-        try { LoopCts.Cancel(); } catch { }
-        try { await AudioClient.StopAsync(); } catch { }
-        AudioClient.Dispose();
+        try { TrackCts.Cancel(); } catch { }
+        if (AudioClient is not null)
+            await AudioClient.StopAsync();
         TrackCts.Dispose();
-        LoopCts.Dispose();
     }
 }

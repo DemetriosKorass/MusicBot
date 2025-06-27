@@ -1,6 +1,10 @@
-﻿namespace MusicPlayerBot.Services.Interfaces;
+﻿using MusicPlayerBot.Data;
+
+namespace MusicPlayerBot.Services.Interfaces;
 public interface IYoutubeService
 {
-    Task<string?> GetAudioStreamUrlAsync(string youtubeUrl);
-    Task<string?> GetVideoTitleAsync(string url);
+    /// <summary>
+    /// Retrieves metadata and the best-available audio stream URL for the given YouTube link.
+    /// </summary>
+    Task<Track> GetTrackAsync(string youtubeUrl);
 }
