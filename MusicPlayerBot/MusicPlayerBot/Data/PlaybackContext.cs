@@ -7,11 +7,14 @@ namespace MusicPlayerBot.Data;
 /// </summary>
 public sealed class PlaybackContext : IAsyncDisposable
 {
+    private CancellationTokenSource _trackCts = new();
     public Track? CurrentTrack { get; set; }
     public Queue<Track> TrackQueue { get; } = new();
     public bool IsLoopEnabled { get; set; }
     public bool IsRunning { get; set; }
-    public CancellationTokenSource TrackCts { get; private set; } = new();
+    public CancellationTokenSource TrackCts => _trackCts; 
+    public void ResetTrackCts() => _trackCts = new CancellationTokenSource(); 
+
     public IAudioClient? AudioClient { get; set; }
 
     public PlaybackContext() { }
