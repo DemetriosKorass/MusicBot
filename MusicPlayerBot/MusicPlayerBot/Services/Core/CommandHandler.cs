@@ -2,7 +2,7 @@
 using Discord.WebSocket;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services;
+namespace MusicPlayerBot.Services.Core;
 
 public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICommandHandler
 {
@@ -54,7 +54,7 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
 
         foreach (var cmd in commands)
             await _client.CreateGlobalApplicationCommandAsync(cmd);
-        }
+    }
 
     private Task OnSlashExecuted(SocketSlashCommand slash)
     {
@@ -72,10 +72,10 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
             var user = slash.User as SocketGuildUser;
             if (user?.VoiceChannel == null)
             {
-            await slash.FollowupAsync(
-                "You must be in a voice channel.",
-                ephemeral: true
-            );
+                await slash.FollowupAsync(
+                    "You must be in a voice channel.",
+                    ephemeral: true
+                );
                 return;
             }
 
@@ -113,7 +113,7 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
 
                 case "skip":
                     await _audio.SkipAsync(user.VoiceChannel.Guild);
-                await slash.FollowupAsync("⏭️ Skipped.");
+                    await slash.FollowupAsync("⏭️ Skipped.");
                     break;
 
                 case "queue":

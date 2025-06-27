@@ -2,7 +2,7 @@
 using Discord.WebSocket;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services;
+namespace MusicPlayerBot.Services.Core;
 public class DiscordService : IDiscordService
 {
     public DiscordSocketClient Client { get; }

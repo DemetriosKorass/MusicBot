@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using MusicPlayerBot.Services.Interfaces;
+using MusicPlayerBot.Services.Core;
 using MusicPlayerBot.Services;
 
 class Program
@@ -11,6 +12,7 @@ class Program
             .AddSingleton<IDiscordService, DiscordService>()
             .AddSingleton<IYoutubeService, YoutubeService>()
             .AddSingleton<IAudioService, AudioService>()
+            .AddSingleton<IPlaybackOrchestrator, PlaybackOrchestrator>()
             .AddSingleton<ICommandHandler, CommandHandler>();
 
         var provider = services.BuildServiceProvider();

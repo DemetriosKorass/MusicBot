@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services;
+namespace MusicPlayerBot.Services.Core;
 public class ConfigurationService : IConfigurationService
 {
     private readonly IConfiguration _conf;

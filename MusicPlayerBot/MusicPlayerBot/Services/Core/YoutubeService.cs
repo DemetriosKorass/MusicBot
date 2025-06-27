@@ -6,7 +6,7 @@ using YoutubeExplode.Videos.Streams;
 using MusicPlayerBot.Services.Interfaces;
 using System.Diagnostics;
 
-namespace MusicPlayerBot.Services;
+namespace MusicPlayerBot.Services.Core;
 public class YoutubeService : IYoutubeService
 {
     private readonly YoutubeClient _yt;
@@ -55,7 +55,7 @@ public class YoutubeService : IYoutubeService
                 return hls;
             }
         }
-        catch {}
+        catch { }
 
         try
         {
@@ -86,7 +86,8 @@ public class YoutubeService : IYoutubeService
                 if (doc.RootElement.TryGetProperty("adaptiveFormats", out var arr))
                 {
                     var streams = arr.EnumerateArray()
-                        .Select(e => new {
+                        .Select(e => new
+                        {
                             Url = e.GetProperty("url").GetString()!,
                             Container = e.GetProperty("container").GetString()!,
                             Bitrate = e.GetProperty("bitrate").GetInt32()

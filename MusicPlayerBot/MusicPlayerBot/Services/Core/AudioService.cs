@@ -4,7 +4,7 @@ using Discord;
 using Discord.Audio;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services
+namespace MusicPlayerBot.Services.Core
 {
     public class AudioService : IAudioService
     {
