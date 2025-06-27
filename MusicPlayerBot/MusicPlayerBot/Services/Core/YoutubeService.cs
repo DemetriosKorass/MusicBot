@@ -51,7 +51,7 @@ public class YoutubeService : IYoutubeService
             var hls = await _yt.Videos.Streams.GetHttpLiveStreamUrlAsync(videoId);
             if (!string.IsNullOrEmpty(hls))
             {
-                Console.WriteLine($"[YoutubeService] Using HLS playlist: {hls}");
+                //Console.WriteLine($"[YoutubeService] Using HLS playlist: {hls}");
                 return hls;
             }
         }

@@ -1,49 +1,48 @@
 ﻿using Discord.WebSocket;
+using Microsoft.Extensions.Logging;
 using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services
 {
-    public class PlaybackOrchestrator(IYoutubeService yt, IAudioService audio) : IPlaybackOrchestrator
+    public class PlaybackOrchestrator(IYoutubeService yt, IAudioService audio, ILogger<PlaybackOrchestrator> logger) : IPlaybackOrchestrator
     {
-        private static void Log(string level, string msg)
-            => Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {msg}");
-
         public async Task AddTrackAsync(SocketSlashCommand slash, SocketGuildUser user, string videoUrl)
         {
-            Log("INFO", $"User {user.Username} enqueued URL: {videoUrl}");
+            logger.LogInformation("User {Username} enqueued URL: {VideoUrl}", user.Username, videoUrl);
             var title = await yt.GetVideoTitleAsync(videoUrl) ?? "Unknown title";
             var streamUrl = await yt.GetAudioStreamUrlAsync(videoUrl)
                               ?? throw new Exception("Couldn’t get an audio stream.");
 
-            var pending = await audio.GetQueueAsync(user.VoiceChannel.Guild);
-            bool isFirst = pending.Length == 0;
+            var wasPlaying = await audio.IsPlayingAsync(user.VoiceChannel.Guild);
+            bool isFirst = !wasPlaying;
 
             await audio.PlayAsync(user.VoiceChannel, slash.Channel, streamUrl, title);
 
             if (isFirst)
             {
-                Log("INFO", $"Playing \"{title}\" immediately for guild {user.Guild.Id}");
+                logger.LogInformation("Playing \"{Title}\" immediately for guild {GuildId}", title, user.Guild.Id);
                 await slash.RespondAsync($"▶️ Now playing — **{title}**");
             }
             else
             {
-                Log("INFO", $"Enqueued \"{title}\" at position {pending.Length + 1}");
+                var queue = await audio.GetQueueAsync(user.VoiceChannel.Guild);
+                logger.LogInformation("Enqueued \"{Title}\" at position {QueueLength}", title, queue.Length);
                 await slash.RespondAsync(
-                    $"➡️ Enqueued **{title}**. Position: {pending.Length + 1}"
+                   $"➡️ Enqueued **{title}**. Position: {queue.Length}"
                 );
             }
         }
 
         public async Task PlayNextAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
-            Log("INFO", $"User {user.Username} requested PlayNext");
+            logger.LogInformation("User {Username} requested PlayNext", user.Username);
             await audio.SkipAsync(user.VoiceChannel.Guild);
             await slash.RespondAsync("⏭️ Skipped to the next track.");
         }
 
         public async Task StopAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
-            Log("INFO", $"User {user.Username} requested Stop");
+            logger.LogInformation("User {Username} requested Stop", user.Username);
             await audio.StopAsync(user.VoiceChannel.Guild);
             await slash.RespondAsync("⏹️ Playback stopped.");
         }
@@ -53,7 +52,7 @@ namespace MusicPlayerBot.Services
 
         public async Task QueueAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
-            Log("INFO", $"User {user.Username} requested Queue");
+            logger.LogInformation("User {Username} requested Queue", user.Username);
             var items = await audio.GetQueueAsync(user.VoiceChannel.Guild);
             if (items.Length == 0)
                 await slash.RespondAsync("📃 The queue is empty.", ephemeral: true);
@@ -66,19 +65,19 @@ namespace MusicPlayerBot.Services
 
         public async Task LoopAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
-            Log("INFO", $"User {user.Username} toggled loop");
+            logger.LogInformation("User {Username} toggled loop", user.Username);
             var on = await audio.ToggleLoopAsync(user.VoiceChannel.Guild);
             await slash.RespondAsync(
                 on ? "🔁 Repeat mode enabled." : "↪️ Repeat mode disabled.",
                 ephemeral: true
             );
         }
-  
+
         public async Task<bool> CheckIfUserIsInChannelAsync(SocketSlashCommand slash, SocketGuildUser user)
         {
             if (user?.VoiceChannel == null)
             {
-                Log("WARN", "Stop invoked but user not in a voice channel");
+                logger.LogWarning("Command invoked but user not in a voice channel");
                 await slash.RespondAsync("❗ You must join a voice channel first.", ephemeral: true);
                 return false;
             }

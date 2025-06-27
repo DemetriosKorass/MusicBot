@@ -1,14 +1,6 @@
-﻿using Discord.WebSocket;
+﻿namespace MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services.Interfaces;
-
-/// <summary>
-/// Handles incoming Discord slash commands and delegates to the playback orchestrator.
-/// </summary>
-public interface ICommandHandler
+public interface ICommandHandler<TCommand>
 {
-    /// <summary>
-    /// Wires up the Discord client events.
-    /// </summary>
-    Task Initialize(DiscordSocketClient client);
+    Task HandleAsync(TCommand command);
 }

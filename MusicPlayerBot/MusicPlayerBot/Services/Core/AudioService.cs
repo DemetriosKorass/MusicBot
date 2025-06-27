@@ -1,85 +1,107 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
+﻿
+using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
+using Microsoft.Extensions.Logging;
+using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
-namespace MusicPlayerBot.Services.Core
+namespace MusicPlayerBot.Services
 {
     public class AudioService : IAudioService
     {
-        private record Track(string StreamUrl, string Title);
+        public event Action<ulong, string> TrackStarted = delegate { };
+        public event Action<ulong, string> TrackEnded = delegate { };
 
-        private class PlaybackContext
-        {
-            public IVoiceChannel Channel { get; set; } = null!;
-            public IAudioClient AudioClient { get; set; } = null!;
-            public CancellationTokenSource CurrentCts { get; set; } = null!;
-            public Queue<Track> Queue { get; } = new();
-            public bool IsRunning { get; set; }
-            public bool IsLoopEnabled { get; set; }
-        }
-
+        private readonly IAudioEncoder _encoder;
+        private readonly ILogger<AudioService> _logger;
         private readonly ConcurrentDictionary<ulong, PlaybackContext> _contexts
             = new();
 
-        public async Task PlayAsync(IVoiceChannel vChannel, IMessageChannel textChannel, string streamUrl, string title)
+        public AudioService(IAudioEncoder encoder, ILogger<AudioService> logger)
         {
-            var guildId = vChannel.Guild.Id;
-            var ctx = _contexts.GetOrAdd(guildId, _ => new PlaybackContext { Channel = vChannel });
-            ctx.Queue.Enqueue(new Track(streamUrl, title));
-
-            if (ctx.IsRunning)
-                await textChannel.SendMessageAsync($"➡️ Enqueued **{title}**. Position: {ctx.Queue.Count}");
-            else
-                _ = RunPlaybackLoop(ctx, guildId);
+            _encoder = encoder;
+            _logger = logger;
         }
 
-        private async Task RunPlaybackLoop(PlaybackContext ctx, ulong guildId)
+        public Task PlayAsync(
+            IVoiceChannel vChannel,
+            IMessageChannel textChannel,
+            string streamUrl,
+            string title
+        )
         {
-            ctx.IsRunning = true;
-            ctx.AudioClient = await ctx.Channel.ConnectAsync();
+            var guildId = vChannel.Guild.Id;
+            var ctx = _contexts.GetOrAdd(guildId, _ => new PlaybackContext(vChannel));
+
+            // enqueue into both channel and snapshot
+            ctx.Queue.Writer.TryWrite((streamUrl, title));
+            ctx.SnapshotQueue.Enqueue((streamUrl, title));
+
+            // only start the loop once
+            if (!ctx.IsRunning)
+            {
+                ctx.IsRunning = true;
+                ctx.LoopCts = new CancellationTokenSource();
+                _ = RunPlaybackLoop(guildId, ctx);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private async Task RunPlaybackLoop(ulong guildId, PlaybackContext ctx)
+        {
+            ctx.AudioClient = await ctx.VoiceChannel.ConnectAsync();
             var pcm = ctx.AudioClient.CreatePCMStream(AudioApplication.Mixed);
 
-            while (ctx.Queue.TryDequeue(out var track))
+            // loop until LoopCts is cancelled
+            await foreach (var (url, title) in ctx.Queue.Reader.ReadAllAsync(ctx.LoopCts.Token))
             {
-                ctx.CurrentCts = new CancellationTokenSource();
+                // respect pause
+                while (ctx.IsPaused)
+                    await Task.Delay(100, ctx.LoopCts.Token);
 
-                var proc = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = $"-re -i \"{track.StreamUrl}\" -ac 2 -f s16le -ar 48000 pipe:1",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                })!;
+                // new TrackCts per track
+                ctx.TrackCts?.Dispose();
+                ctx.TrackCts = new CancellationTokenSource();
+
+                TrackStarted?.Invoke(guildId, title);
+                _logger.LogInformation("Track started: {Title}", title);
 
                 try
                 {
-                    await proc.StandardOutput.BaseStream
-                              .CopyToAsync(pcm, ctx.CurrentCts.Token);
+                    // cancel only this track
+                    await _encoder.EncodeToPcmAsync(url, pcm, ctx.TrackCts.Token);
                 }
                 catch (OperationCanceledException)
                 {
-                }
-                finally
-                {
-                    try { if (!proc.HasExited) proc.Kill(); } catch { }
+                    _logger.LogInformation("Track {Title} was skipped.", title);
                 }
 
+                TrackEnded?.Invoke(guildId, title);
+                _logger.LogInformation("Track ended: {Title}", title);
+
+                await pcm.FlushAsync();
+
+                // re-enqueue if looping
                 if (ctx.IsLoopEnabled)
-                    ctx.Queue.Enqueue(track);
+                    ctx.Queue.Writer.TryWrite((url, title));
             }
 
+            // loop has ended
+            ctx.IsRunning = false;
             try { await pcm.FlushAsync(); } catch { }
-            try { await ctx.AudioClient.StopAsync(); } catch { }
+            await ctx.DisposeAsync();
             _contexts.TryRemove(guildId, out _);
         }
 
         public Task SkipAsync(IGuild guild)
         {
-            if (_contexts.TryGetValue(guild.Id, out var ctx) && ctx.IsRunning)
-                ctx.CurrentCts?.Cancel();
+            if (_contexts.TryGetValue(guild.Id, out var ctx))
+            {
+                // cancel only the current track
+                ctx.TrackCts.Cancel();
+            }
             return Task.CompletedTask;
         }
 
@@ -87,16 +109,19 @@ namespace MusicPlayerBot.Services.Core
         {
             if (_contexts.TryRemove(guild.Id, out var ctx))
             {
-                ctx.CurrentCts?.Cancel();
-                ctx.Queue.Clear();
-                try { await ctx.AudioClient.StopAsync(); } catch { }
+                // cancel the entire loop
+                ctx.LoopCts.Cancel();
+                await ctx.DisposeAsync();
             }
         }
 
         public Task<string[]> GetQueueAsync(IGuild guild)
         {
             if (_contexts.TryGetValue(guild.Id, out var ctx))
-                return Task.FromResult(ctx.Queue.Select(t => t.Title).ToArray());
+            {
+                var titles = ctx.SnapshotQueue.Select(t => t.Title).ToArray();
+                return Task.FromResult(titles);
+            }
             return Task.FromResult(Array.Empty<string>());
         }
 
@@ -109,10 +134,25 @@ namespace MusicPlayerBot.Services.Core
             }
             else
             {
-                var newContext = new PlaybackContext { IsLoopEnabled = true };
-                _contexts[guild.Id] = newContext;
-                return Task.FromResult(newContext.IsLoopEnabled);
+                var newCtx = new PlaybackContext(null!);
+                newCtx.IsLoopEnabled = true;
+                _contexts[guild.Id] = newCtx;
+                return Task.FromResult(true);
             }
+        }
+
+        public Task PauseAsync(IGuild guild)
+        {
+            if (_contexts.TryGetValue(guild.Id, out var ctx))
+                ctx.IsPaused = true;
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync(IGuild guild)
+        {
+            if (_contexts.TryGetValue(guild.Id, out var ctx))
+                ctx.IsPaused = false;
+            return Task.CompletedTask;
         }
     }
 }
