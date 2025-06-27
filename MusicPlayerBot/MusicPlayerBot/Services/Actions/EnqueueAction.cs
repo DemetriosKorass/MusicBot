@@ -4,6 +4,7 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
+/// <inheritdoc cref="IEnqueueAction"/>
 public class EnqueueAction(
     IYoutubeService yt,
     IPlaybackContextManager ctxMgr,

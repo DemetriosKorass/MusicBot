@@ -4,15 +4,16 @@ using MusicPlayerBot.Services.Interfaces;
 namespace MusicPlayerBot.Services.CommandHandlers;
 
 public class QueueCommandHandler(
-    IQueueAction queue
+    IShowQueueAction queue,
+    ICheckVoiceAction checkVoice
 ) : ICommandHandler<QueueCommand>
 {
     public async Task HandleAsync(QueueCommand cmd)
     {
+        if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
+            return;
+
         await cmd.Slash.DeferAsync();
-        await queue.ExecuteAsync(
-            cmd.User.VoiceChannel.Guild,
-            cmd.Slash.Channel
-        );
+        await queue.ExecuteAsync(cmd.Slash, cmd.User);
     }
 }

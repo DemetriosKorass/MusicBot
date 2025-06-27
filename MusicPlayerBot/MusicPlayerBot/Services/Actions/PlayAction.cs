@@ -4,6 +4,7 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
+///inheritdoc cref="IPlayAction"/>
 public class PlayAction(
     IYoutubeService yt,
     IPlaybackContextManager ctxMgr,

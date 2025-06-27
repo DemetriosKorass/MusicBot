@@ -28,7 +28,6 @@ class Program
             .AddSingleton<IYoutubeService, YoutubeService>()
             .AddSingleton<IAudioService, AudioService>()
             .AddSingleton<IAudioEncoder, FFmpegAudioEncoder>()
-            .AddSingleton<IPlaybackOrchestrator, PlaybackOrchestrator>()
             .AddSingleton<IPlaybackContextManager, PlaybackContextManager>()
 
             .AddSingleton<ISlashCommandDispatcher, SlashCommandDispatcher>()

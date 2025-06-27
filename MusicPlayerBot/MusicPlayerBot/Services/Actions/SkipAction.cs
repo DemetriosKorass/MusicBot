@@ -4,6 +4,7 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Actions;
 
+/// <inheritdoc cref="ISkipAction"/>
 public class SkipAction(
     IPlaybackContextManager ctxMgr,
     ILogger<SkipAction> logger

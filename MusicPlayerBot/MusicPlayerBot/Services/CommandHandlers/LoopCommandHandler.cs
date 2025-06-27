@@ -4,15 +4,16 @@ using MusicPlayerBot.Services.Interfaces;
 namespace MusicPlayerBot.Services.CommandHandlers;
 
 public class LoopCommandHandler(
-    ILoopAction loop
+    IEnableLoopAction loop,
+    ICheckVoiceAction checkVoice
 ) : ICommandHandler<LoopCommand>
 {
     public async Task HandleAsync(LoopCommand cmd)
     {
+        if (!await checkVoice.ExecuteAsync(cmd.Slash, cmd.User))
+            return;
+
         await cmd.Slash.DeferAsync();
-        await loop.ExecuteAsync(
-            cmd.User.VoiceChannel.Guild,
-            cmd.Slash.Channel
-        );
+        await loop.ExecuteAsync(cmd.Slash, cmd.User);
     }
 }
