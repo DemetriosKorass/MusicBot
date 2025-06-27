@@ -4,12 +4,17 @@ using MusicPlayerBot.Services.Interfaces;
 
 namespace MusicPlayerBot.Services.Core;
 
-public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICommandHandler
+/// <summary>
+/// Handles incoming Discord slash commands and delegates to the playback orchestrator.
+/// </summary>
+public class CommandHandler(IPlaybackOrchestrator orchestrator) : ICommandHandler
 {
-    private readonly IAudioService _audio = audio;
-    private readonly IYoutubeService _youtube = youtube;
+    private readonly IPlaybackOrchestrator _orchestrator = orchestrator;
     private DiscordSocketClient _client = null!;
 
+    /// <summary>
+    /// Wires up the Discord client events.
+    /// </summary>
     public Task Initialize(DiscordSocketClient client)
     {
         _client = client;
@@ -18,17 +23,17 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Registers all of the slash commands that the bot supports.
+    /// </summary>
     private async Task RegisterSlashCommands()
     {
         var commands = new[]
         {
             new SlashCommandBuilder()
                 .WithName("play")
-                .WithDescription("Play a YouTube URL")
-                .AddOption("url",
-                            ApplicationCommandOptionType.String,
-                            "YouTube video URL",
-                            isRequired: true)
+                .WithDescription("Play a YouTube URL (or enqueue if already playing)")
+                .AddOption("url", ApplicationCommandOptionType.String, "YouTube video URL", isRequired: true)
                 .Build(),
 
             new SlashCommandBuilder()
@@ -56,96 +61,47 @@ public class CommandHandler(IAudioService audio, IYoutubeService youtube) : ICom
             await _client.CreateGlobalApplicationCommandAsync(cmd);
     }
 
+    /// <summary>
+    /// Entry point for when a slash command is executed.
+    /// </summary>
     private Task OnSlashExecuted(SocketSlashCommand slash)
     {
         _ = HandleSlashAsync(slash);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Routes each slash command to the corresponding orchestrator action.
+    /// </summary>
     private async Task HandleSlashAsync(SocketSlashCommand slash)
     {
-        Console.WriteLine($"[CommandHandler] Slash '{slash.Data.Name}' invoked by {slash.User.Username}");
-        await slash.DeferAsync(ephemeral: false);
+        if (slash.User is not SocketGuildUser user || !_orchestrator.CheckIfUserIsInChannelAsync(slash, user).Result)
+            return;
 
-        try
+        switch (slash.Data.Name)
         {
-            var user = slash.User as SocketGuildUser;
-            if (user?.VoiceChannel == null)
-            {
-                await slash.FollowupAsync(
-                    "You must be in a voice channel.",
-                    ephemeral: true
-                );
-                return;
-            }
-
-            switch (slash.Data.Name)
-            {
-                case "play":
-                    {
-                        var videoUrl = slash.Data.Options
-                                              .First(o => o.Name == "url")
-                                              .Value!
-                                              .ToString()!;
-
-                        try
-                        {
-                            var title = await _youtube.GetVideoTitleAsync(videoUrl) ?? "Unknown title";
-                            var streamUrl = await _youtube.GetAudioStreamUrlAsync(videoUrl)
-                                              ?? throw new Exception("Couldn’t get an audio stream for that link.");
-
-                            await _audio.PlayAsync(user.VoiceChannel, slash.Channel, streamUrl, title);
-                            await slash.FollowupAsync($"▶️ Playing **{title}**");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[CommandHandler] Play error: {ex}");
-                            await slash.FollowupAsync($"❌ Error playing track: {ex.Message}", ephemeral: true);
-                        }
-
-                        break;
-                    }
-
-                case "stop":
-                    await _audio.StopAsync(user.VoiceChannel.Guild);
-                    await slash.FollowupAsync("⏹️ Stopped.");
+            case "play":
+                {
+                    var videoUrl = slash.Data.Options
+                                          .First(o => o.Name == "url")
+                                          .Value!
+                                          .ToString()!;
+                    await _orchestrator.AddTrackAsync(slash, user, videoUrl);
                     break;
+                }
 
-                case "skip":
-                    await _audio.SkipAsync(user.VoiceChannel.Guild);
-                    await slash.FollowupAsync("⏭️ Skipped.");
-                    break;
-
-                case "queue":
-                    {
-                        var queueTitles = await _audio.GetQueueAsync(user.VoiceChannel.Guild);
-                        if (queueTitles.Length == 0)
-                            await slash.FollowupAsync("📃 Queue is empty.", ephemeral: true);
-                        else
-                        {
-                            var list = string.Join("\n", queueTitles.Select((t, i) => $"{i + 1}. {t}"));
-                            await slash.FollowupAsync($"📃 **Queue:**\n{list}", ephemeral: true);
-                        }
-                        break;
-                    }
-
-                case "loop":
-                    {
-                        var toggledOn = await _audio.ToggleLoopAsync(user.VoiceChannel.Guild);
-                        await slash.FollowupAsync(
-                            toggledOn
-                              ? "🔁 Loop is **ON**."
-                              : "↪️ Loop is **OFF**.",
-                            ephemeral: true
-                        );
-                        break;
-                    }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[CommandHandler] Handler error: {ex}");
-            await slash.FollowupAsync("❌ An unexpected error occurred.", ephemeral: true);
+            case "stop":
+                await _orchestrator.StopAsync(slash, user);
+                break;
+            case "skip":
+                await _orchestrator.SkipAsync(slash, user);
+                break;
+            case "queue":
+                await _orchestrator.QueueAsync(slash, user);
+                break;
+            case "loop":
+                await _orchestrator.LoopAsync(slash, user);
+                break;
         }
     }
 }
