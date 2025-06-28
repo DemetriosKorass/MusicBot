@@ -19,7 +19,6 @@ public class StopAction(
         var guildId = user.Guild.Id;
         logger.LogInformation("Guild {Guild}: stop requested", guildId);
 
-        await ctxMgr.RemoveAsync(guildId);
         await audio.StopAsync(user.Guild, ctx);
         await slash.FollowupAsync("⏹️ Playback stopped.");
     }
