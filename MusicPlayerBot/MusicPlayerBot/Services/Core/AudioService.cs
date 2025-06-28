@@ -20,35 +20,24 @@ public class AudioService(
     public async Task<IAudioClient> PlayAsync(Track track, PlaybackContext ctx)
     {
         var guildId = ctx.VoiceChannel.Guild.Id;
-        var audioClient = await ConnectAndPrepareAsync(ctx.VoiceChannel, ctx);
 
-        var pcm = audioClient.CreatePCMStream(AudioApplication.Mixed);
+        if (ctx.AudioClient == null)
+        {
+            ctx.AudioClient = await ctx.VoiceChannel.ConnectAsync().ConfigureAwait(false);
+            ctx.PcmStream = ctx.AudioClient.CreatePCMStream(AudioApplication.Mixed);
+        }
 
-        CancelAndResetTrack(ctx);
+        ctx.ResetTrackCts();
         var token = ctx.TrackCts.Token;
 
-        _ = Task.Run(() => RunPlaybackAsync(track, audioClient, pcm, guildId, ctx, token));
+        _ = Task.Run(() => RunPlaybackAsync(track, ctx.PcmStream, guildId, ctx, token));
 
         logger.LogInformation("Guild {GuildId}: started track: {Title}", guildId, track.Title);
-        return audioClient;
-    }
-
-    private static async Task<IAudioClient> ConnectAndPrepareAsync(IVoiceChannel channel, PlaybackContext ctx)
-    {
-        var audioClient = await channel.ConnectAsync();
-        ctx.AudioClient = audioClient;
-        return audioClient;
-    }
-
-    private static void CancelAndResetTrack(PlaybackContext ctx)
-    {
-        ctx.TrackCts.Cancel();
-        ctx.ResetTrackCts();
+        return ctx.AudioClient;
     }
 
     private async Task RunPlaybackAsync(
         Track track,
-        IAudioClient audioClient,
         AudioOutStream pcm,
         ulong guildId,
         PlaybackContext ctx,
@@ -69,12 +58,11 @@ public class AudioService(
         finally
         {
             try { await pcm.FlushAsync(token).ConfigureAwait(false); } catch { }
-            //try { await audioClient.StopAsync().ConfigureAwait(false); } catch { }
 
             logger.LogInformation("Guild {GuildId}: track ended: {Title}", guildId, track.Title);
 
             if (TrackEnded != null)
-                await TrackEnded(guildId, ctx, track.Title);
+                await TrackEnded(guildId, ctx, track.Title).ConfigureAwait(false);
         }
     }
 
@@ -88,12 +76,17 @@ public class AudioService(
     }
 
     /// <inheritdoc />
-    public async Task StopAsync(IGuild guild, PlaybackContext ctx)
+    public Task StopAsync(IGuild guild, PlaybackContext ctx)
     {
         if (ctx.AudioClient is { })
         {
+            ctx.TrackCts.Cancel();
+
+            ctx.TrackQueue.Clear();
+
+            ctx.IsRunning = false;
             logger.LogInformation("Guild {GuildId}: stop invoked", guild.Id);
-            await ctx.AudioClient.StopAsync().ConfigureAwait(false);
         }
+        return Task.CompletedTask;
     }
 }

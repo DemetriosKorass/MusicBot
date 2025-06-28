@@ -18,18 +18,23 @@ public class ShowQueueAction(ILogger<ShowQueueAction> logger) : IShowQueueAction
                        .Select((t, i) => $"{i + 1}. {t.DisplayName}")
                        .ToArray();
 
-        if (items.Length == 0)
+        if (ctx.CurrentTrack == null && items.Length == 0)
         {
-            logger.LogInformation("Guild {Guild}: queue empty", user.Guild.Id);
-            await slash.FollowupAsync("📃 Queue is empty.", ephemeral: true);
+            logger.LogInformation("Guild {Guild}: no tracks currently playing or in queue", user.Guild.Id);
+            await slash.FollowupAsync("📃 No tracks are currently playing or in the queue.", ephemeral: true);
         }
         else
         {
-            logger.LogInformation("Guild {Guild}: listing queue ({Count} items)", user.Guild.Id, items.Length);
-            await slash.FollowupAsync(
-                "📃 **Upcoming:**\n" + string.Join("\n", items),
-                ephemeral: true
-            );
+            var currentlyPlaying = ctx.CurrentTrack != null
+                ? $" **Currently Playing:** {ctx.CurrentTrack.DisplayName}"
+                : " **Currently Playing:** None";
+
+            var playingNext = items.Length > 0
+                ? "\n\n📃 **Playing Next:**\n" + string.Join("\n", items)
+                : "";
+
+            logger.LogInformation("Guild {Guild}: showing currently playing and queue ({Count} items)", user.Guild.Id, items.Length);
+            await slash.FollowupAsync($"{currentlyPlaying}{playingNext}", ephemeral: true);
         }
     }
 }

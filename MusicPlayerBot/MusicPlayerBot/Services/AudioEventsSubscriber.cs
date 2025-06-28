@@ -1,5 +1,4 @@
-﻿using Discord.WebSocket;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MusicPlayerBot.Data;
 using MusicPlayerBot.Services.Interfaces;
 
@@ -9,22 +8,16 @@ public class AudioEventsSubscriber
 {
     private readonly IAudioService _audio;
     private readonly IPlayAction _play;
-    private readonly IPlaybackContextManager _ctxMgr;
-    private readonly DiscordSocketClient _client;
     private readonly ILogger<AudioEventsSubscriber> _logger;
 
     public AudioEventsSubscriber(
         IAudioService audio,
         IPlayAction play,
-        IPlaybackContextManager ctxMgr,
-        DiscordSocketClient client,
         ILogger<AudioEventsSubscriber> logger
     )
     {
         _audio = audio;
         _play = play;
-        _ctxMgr = ctxMgr;
-        _client = client;
         _logger = logger;
 
         _audio.TrackEnded += async (guildId, ctx, _)
@@ -51,9 +44,6 @@ public class AudioEventsSubscriber
             _logger.LogInformation("Guild {GuildId}: queue empty, stopping", guildId);
             ctx.IsRunning = false;
             ctx.CurrentTrack = null;
-            if (ctx.AudioClient is not null)
-                await ctx.AudioClient.StopAsync();
-            await _ctxMgr.RemoveAsync(guildId);
         }
     }
 }

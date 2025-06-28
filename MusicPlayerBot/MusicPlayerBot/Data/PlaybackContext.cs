@@ -13,10 +13,11 @@ public sealed class PlaybackContext(IVoiceChannel channel, IMessageChannel textC
     public bool IsRunning { get; set; }
     public CancellationTokenSource TrackCts { get; private set; } = new();
     public IAudioClient? AudioClient { get; set; }
+    public AudioOutStream PcmStream { get; internal set; }
 
     public void ResetTrackCts()
     {
-        TrackCts.Dispose();
+        TrackCts?.Dispose();
         TrackCts = new CancellationTokenSource();
     }
 

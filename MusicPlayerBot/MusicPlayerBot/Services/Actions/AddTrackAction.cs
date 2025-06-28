@@ -19,7 +19,6 @@ public class AddTrackAction(
     {
         Track track = await yt.GetTrackAsync(youtubeUrl);
 
-        ctx.TrackQueue.Enqueue(track);
         logger.LogInformation(
             "Guild {GuildId}: enqueued track {Title} (queue size now {Count})",
             user.Guild.Id, track.Title, ctx.TrackQueue.Count
