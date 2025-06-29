@@ -46,7 +46,7 @@ class Program
             .AddSingleton<ICheckVoiceAction, CheckVoiceAction>()
             .AddSingleton<IShowQueueAction, ShowQueueAction>()
             .AddSingleton<IEnableLoopAction, EnableLoopAction>()
-            .AddSingleton<IDisposeAction, IDisposeAction>()
+            .AddSingleton<IDisposeAction, DisposeAction>()
 
             .AddSingleton<DiscordSocketClient>()
             .AddSingleton<AudioEventsSubscriber>();
