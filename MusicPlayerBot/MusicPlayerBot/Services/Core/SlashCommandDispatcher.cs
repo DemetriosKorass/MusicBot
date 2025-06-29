@@ -11,6 +11,7 @@ namespace MusicPlayerBot.Services.Core
         ICommandHandler<StopCommand> stopHandler,
         ICommandHandler<QueueCommand> queueHandler,
         ICommandHandler<LoopCommand> loopHandler,
+        ICommandHandler<DisposeCommand> disposeHandler,
         IPlaybackContextManager ctxMgr
     ) : ISlashCommandDispatcher
     {
@@ -19,6 +20,7 @@ namespace MusicPlayerBot.Services.Core
         private readonly ICommandHandler<StopCommand> _stopHandler = stopHandler;
         private readonly ICommandHandler<QueueCommand> _queueHandler = queueHandler;
         private readonly ICommandHandler<LoopCommand> _loopHandler = loopHandler;
+        private readonly ICommandHandler<DisposeCommand> _disposeHandler = disposeHandler;
         private DiscordSocketClient _client = null!;
 
         public Task Initialize(DiscordSocketClient client)
@@ -38,7 +40,8 @@ namespace MusicPlayerBot.Services.Core
                 new SlashCommandBuilder().WithName("stop").WithDescription("Stop playback").Build(),
                 new SlashCommandBuilder().WithName("skip").WithDescription("Skip the current track").Build(),
                 new SlashCommandBuilder().WithName("queue").WithDescription("Show pending tracks").Build(),
-                new SlashCommandBuilder().WithName("loop").WithDescription("Toggle loop mode").Build()
+                new SlashCommandBuilder().WithName("loop").WithDescription("Toggle loop mode").Build(),
+                new SlashCommandBuilder().WithName("dispose").WithDescription("Get rid of a shush. For now...").Build(),
             };
 
             foreach (var cmd in commands)
@@ -91,6 +94,11 @@ namespace MusicPlayerBot.Services.Core
                 case "loop":
                     var loopCmd = new LoopCommand(slash, user);
                     await _loopHandler.HandleAsync(loopCmd, ctx);
+                    break;
+
+                case "dispose":
+                    var disposeCommand = new DisposeCommand(slash, user);
+                    await _disposeHandler.HandleAsync(disposeCommand, ctx);
                     break;
             }
         }
