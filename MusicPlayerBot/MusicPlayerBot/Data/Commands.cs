@@ -23,3 +23,7 @@ public record LoopCommand(
     SocketSlashCommand Slash,
     SocketGuildUser User
 );
+public record DisposeCommand(
+    SocketSlashCommand Slash,
+    SocketGuildUser User
+);

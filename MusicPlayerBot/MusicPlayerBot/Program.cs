@@ -36,6 +36,7 @@ class Program
             .AddSingleton<ICommandHandler<StopCommand>, StopCommandHandler>()
             .AddSingleton<ICommandHandler<QueueCommand>, QueueCommandHandler>()
             .AddSingleton<ICommandHandler<LoopCommand>, LoopCommandHandler>()
+            .AddSingleton<ICommandHandler<DisposeCommand>, DisposeCommandHandler>()
 
             .AddSingleton<IPlayAction, PlayAction>()
             .AddSingleton<ISkipAction, SkipAction>()
@@ -45,6 +46,7 @@ class Program
             .AddSingleton<ICheckVoiceAction, CheckVoiceAction>()
             .AddSingleton<IShowQueueAction, ShowQueueAction>()
             .AddSingleton<IEnableLoopAction, EnableLoopAction>()
+            .AddSingleton<IDisposeAction, DisposeAction>()
 
             .AddSingleton<DiscordSocketClient>()
             .AddSingleton<AudioEventsSubscriber>();
